@@ -24,6 +24,19 @@ typedef struct {
     char *extra;
 }Args;
 
+
+//add
+
+//list
+
+//view 
+
+// remove_report
+
+//update_threshold
+
+//filter
+
 int main(int argc, char **argv) {
 
     Args args={0};
