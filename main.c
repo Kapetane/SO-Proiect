@@ -26,7 +26,6 @@ typedef struct {
     char *extra;
 } Args;
 
-// 🔴 GLOBALE (corect)
 char *CURRENT_USER = NULL;
 char *CURRENT_ROLE = NULL;
 
@@ -156,7 +155,6 @@ void list(const char *district_id) {
     }
 
     printf("Rapoarte in %s:\n", district_id);
-
     Report r;
     int cnt = 0;
 
@@ -168,7 +166,7 @@ void list(const char *district_id) {
         printf("Categorie: %s\n", r.issue_category);
         printf("Severitate: %d\n", r.severity_level);
         printf("Timestamp: %ld\n", r.timestamp);
-        printf("Descriere: %s\n", r.description_text);
+        printf("Descriere: %s\n\n", r.description_text);
     }
 
     if (cnt == 0)
@@ -181,6 +179,105 @@ void list(const char *district_id) {
     printf("Permisiuni: %s\n", perm);
     printf("Ultima modificare: %s", ctime(&st.st_mtime));
 }
+
+void view(const char *district_id, int report_id) {
+    char path[256];
+    snprintf(path, sizeof(path), "%s/reports.dat", district_id);
+
+    int fd = open(path, O_RDONLY);
+    if(fd < 0) {
+        perror("open");
+        return;
+    }
+
+    Report r;
+    int gasit =0;
+
+    while (read(fd, &r, sizeof(Report)) == sizeof(Report)) {
+        if (r.report_id == report_id) {
+            printf("Raport Gasit:\n");
+            printf("ID: %d\n", r.report_id);
+            printf("Inspector: %s\n", r.inspector_name);
+            printf("Coordonate: (%f, %f)\n", r.latitude, r.longitude);
+            printf("Categorie: %s\n", r.issue_category);
+            printf("Severitate: %d\n", r.severity_level);
+            printf("Timestamp: %ld\n", r.timestamp);
+            printf("Descriere: %s\n", r.description_text);
+            gasit = 1;
+            break;
+        }
+    }
+
+    if (gasit == 0) {
+        printf("Report cu ID %d nu a fost gasit.\n", report_id);
+    }
+
+    close(fd);
+}
+
+void remove_report(const char *district_id, int report_id) {
+    if(strcmp(CURRENT_ROLE, "manager") != 0) {
+        printf("Manager role only!\n");
+        return;
+    }
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/reports.dat", district_id);
+
+    int fd = open(path, O_RDWR);
+    if(fd < 0) {
+        perror("open");
+        return;
+    }
+
+    Report r;
+    off_t pos = 0;
+    off_t found_pos = -1;
+
+    while (read(fd, &r, sizeof(Report)) == sizeof(Report)) {
+        if (r.report_id == report_id) {
+            found_pos = pos;
+            break;
+        }
+        pos += sizeof(Report);
+    }
+
+    if (found_pos == -1) {
+        printf("Report cu ID %d nu exista.\n", report_id);
+        close(fd);
+        return;
+    }
+
+    off_t read_pos = found_pos + sizeof(Report);
+    off_t write_pos = found_pos;
+
+    Report temp;
+
+    while (1) {
+        lseek(fd, read_pos, SEEK_SET);
+        ssize_t bytes = read(fd, &temp, sizeof(Report));
+        if (bytes != sizeof(Report))
+            break;
+        lseek(fd, write_pos, SEEK_SET);
+        write(fd, &temp, sizeof(Report));
+        read_pos += sizeof(Report);
+        write_pos += sizeof(Report);
+    }
+
+    struct stat st;
+    fstat(fd, &st);
+
+    if (ftruncate(fd, st.st_size - sizeof(Report)) < 0) {
+        perror("ftruncate");
+    }
+
+    close(fd);
+
+    printf("Report %d a fost sters.\n", report_id);
+
+    log_action(district_id, CURRENT_ROLE, CURRENT_USER, "REMOVE");
+}
+
 
 int main(int argc, char **argv) {
     srand(time(NULL));
@@ -198,6 +295,16 @@ int main(int argc, char **argv) {
             args.operation = "list";
             args.district_id = argv[++i];
         }
+        else if(!strcmp(argv[i], "--view") && (i + 2 < argc)) {
+            args.operation = "view";
+            args.district_id = argv[++i];
+            args.extra = argv[++i]; //report_id
+        }
+        else if(!strcmp(argv[i], "--remove_report") && (i + 2 < argc)) {
+            args.operation = "remove_report";
+            args.district_id = argv[++i];
+            args.extra = argv[++i]; //report_id
+        }
     }
 
     if (!args.user_role || !args.user_name || !args.operation || !args.district_id) {
@@ -214,5 +321,10 @@ int main(int argc, char **argv) {
     if (!strcmp(args.operation, "list"))
         list(args.district_id);
 
+    if(!strcmp(args.operation, "view"))
+        view(args.district_id, atoi(args.extra));
+
+    if (!strcmp(args.operation, "remove_report"))
+        remove_report(args.district_id, atoi(args.extra));
     return 0;
 }
