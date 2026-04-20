@@ -30,14 +30,17 @@ char *CURRENT_USER = NULL;
 char *CURRENT_ROLE = NULL;
 
 void permissions(mode_t mode, char *s) {
+    //user
     s[0] = (mode & S_IRUSR) ? 'r' : '-';
     s[1] = (mode & S_IWUSR) ? 'w' : '-';
     s[2] = (mode & S_IXUSR) ? 'x' : '-';
 
+    //group
     s[3] = (mode & S_IRGRP) ? 'r' : '-';
     s[4] = (mode & S_IWGRP) ? 'w' : '-';
     s[5] = (mode & S_IXGRP) ? 'x' : '-';
 
+    //others
     s[6] = (mode & S_IROTH) ? 'r' : '-';
     s[7] = (mode & S_IWOTH) ? 'w' : '-';
     s[8] = (mode & S_IXOTH) ? 'x' : '-';
@@ -96,7 +99,9 @@ void create_symlink(const char *district) {
 }
 
 void add(const char *district_id) {
-    mkdir(district_id, 0750);
+    if (mkdir(district_id, 0750) < 0) {
+    }
+
     chmod(district_id, 0750);
 
     ensure_cfg(district_id);
@@ -119,20 +124,54 @@ void add(const char *district_id) {
     strncpy(r.inspector_name, CURRENT_USER, sizeof(r.inspector_name) - 1);
     r.inspector_name[sizeof(r.inspector_name) - 1] = '\0';
 
-    r.latitude = 46.0;
-    r.longitude = 21.0;
-    strcpy(r.issue_category, "road");
-    r.severity_level = 2;
+    printf("Latitude: ");
+    scanf("%f", &r.latitude);
+
+    printf("Longitude: ");
+    scanf("%f", &r.longitude);
+
+    for (;;) {
+        printf("Category (road/lightning/flooding/other): ");
+        scanf("%31s", r.issue_category);
+
+        if (!strcmp(r.issue_category, "road") ||
+            !strcmp(r.issue_category, "lightning") ||
+            !strcmp(r.issue_category, "flooding") ||
+            !strcmp(r.issue_category, "other")) {
+            break;
+        }
+
+        printf("Invalid category! Try again :)\n");
+    }
+
+    for (;;) {
+        printf("Severity (1/2/3): ");
+        scanf("%d", &r.severity_level);
+
+        if (r.severity_level >= 1 && r.severity_level <= 3)
+            break;
+
+        printf("Invalid level! Try again :)\n");
+    }
+
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+
+    printf("Description: ");
+    fgets(r.description_text, sizeof(r.description_text), stdin);
+    r.description_text[strcspn(r.description_text, "\n")] = '\0';
+
     r.timestamp = time(NULL);
-    strcpy(r.description_text, "Default description");
 
-    printf("Adding report for %s in %s...\n", r.inspector_name, district_id);
+    if (write(fd, &r, sizeof(Report)) != sizeof(Report)) {
+        perror("write");
+    }
 
-    write(fd, &r, sizeof(Report));
     close(fd);
 
     create_symlink(district_id);
     log_action(district_id, CURRENT_ROLE, CURRENT_USER, "ADD");
+
 }
 
 void list(const char *district_id) {
@@ -278,6 +317,147 @@ void remove_report(const char *district_id, int report_id) {
     log_action(district_id, CURRENT_ROLE, CURRENT_USER, "REMOVE");
 }
 
+void update_threshold(const char *district_id, int value) {
+    if(strcmp(CURRENT_ROLE, "manager") != 0) {
+        printf("Manager role only!");
+        return;
+    }
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/district.cfg", district_id);
+
+    struct stat st;
+    if(stat(path, &st) < 0){
+        perror("stat");
+        return;
+    }
+
+    if((st.st_mode & 0777) != 0640) {
+        printf("permission bits != 640");
+        return;
+    }
+
+    int fd = open(path, O_WRONLY | O_TRUNC);
+    if(fd<0) {
+        perror("open");
+        return;
+    }
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "threshold=%d\n", value);
+
+    write(fd, buf, strlen(buf));
+    close(fd);
+
+    printf("New Threshold: %d\n", value);
+
+    log_action(district_id, CURRENT_ROLE, CURRENT_USER, "UPDATE_THRESHOLD");
+
+}
+
+//FILTER ☠
+
+int parse_condition(const char *input, char *field, char *op, char *value) {
+    char temp[128];
+    strncpy(temp, input, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+
+    char *token = strtok(temp, ":");
+    if (!token) return 0;
+    strcpy(field, token);
+
+    token = strtok(NULL, ":");
+    if (!token) return 0;
+    strcpy(op, token);
+
+    token = strtok(NULL, ":");
+    if (!token) return 0;
+    strcpy(value, token);
+
+    return 1;
+}
+int match_condition(Report *r, const char *field, const char *op, const char *value) {
+
+    // --- SEVERITY ---
+    if (strcmp(field, "severity") == 0) {
+        int val = atoi(value);
+
+        if (strcmp(op, "==") == 0) return r->severity_level == val;
+        if (strcmp(op, "!=") == 0) return r->severity_level != val;
+        if (strcmp(op, ">") == 0) return r->severity_level > val;
+        if (strcmp(op, ">=") == 0) return r->severity_level >= val;
+        if (strcmp(op, "<") == 0) return r->severity_level < val;
+        if (strcmp(op, "<=") == 0) return r->severity_level <= val;
+    }
+
+    // --- CATEGORY ---
+    if (strcmp(field, "category") == 0) {
+        if (strcmp(op, "==") == 0) return strcmp(r->issue_category, value) == 0;
+        if (strcmp(op, "!=") == 0) return strcmp(r->issue_category, value) != 0;
+    }
+
+    // --- INSPECTOR ---
+    if (strcmp(field, "inspector") == 0) {
+        if (strcmp(op, "==") == 0) return strcmp(r->inspector_name, value) == 0;
+        if (strcmp(op, "!=") == 0) return strcmp(r->inspector_name, value) != 0;
+    }
+
+    // --- TIMESTAMP ---
+    if (strcmp(field, "timestamp") == 0) {
+        long val = atol(value);
+
+        if (strcmp(op, "==") == 0) return r->timestamp == val;
+        if (strcmp(op, "!=") == 0) return r->timestamp != val;
+        if (strcmp(op, ">") == 0) return r->timestamp > val;
+        if (strcmp(op, ">=") == 0) return r->timestamp >= val;
+        if (strcmp(op, "<") == 0) return r->timestamp < val;
+        if (strcmp(op, "<=") == 0) return r->timestamp <= val;
+    }
+
+    return 0;
+}
+void filter(const char *district_id, const char *condition) {
+    char path[256];
+    snprintf(path, sizeof(path), "%s/reports.dat", district_id);
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        perror("open");
+        return;
+    }
+
+    char field[32], op[4], value[64];
+
+    if (!parse_condition(condition, field, op, value)) {
+        printf("Conditie invalida!\n");
+        close(fd);
+        return;
+    }
+
+    Report r;
+    int found = 0;
+
+    while (read(fd, &r, sizeof(Report)) == sizeof(Report)) {
+        if (match_condition(&r, field, op, value)) {
+            printf("\n=== MATCH ===\n");
+            printf("ID: %d\n", r.report_id);
+            printf("Inspector: %s\n", r.inspector_name);
+            printf("Coordonate: (%f, %f)\n", r.latitude, r.longitude);
+            printf("Categorie: %s\n", r.issue_category);
+            printf("Severitate: %d\n", r.severity_level);
+            printf("Timestamp: %ld\n", r.timestamp);
+            printf("Descriere: %s\n", r.description_text);
+
+            found = 1;
+        }
+    }
+
+    if (!found)
+        printf("Nu s-au gasit rezultate.\n");
+
+    close(fd);
+}
+//END FILTER ☠
 
 int main(int argc, char **argv) {
     srand(time(NULL));
@@ -305,6 +485,16 @@ int main(int argc, char **argv) {
             args.district_id = argv[++i];
             args.extra = argv[++i]; //report_id
         }
+        else if(!strcmp(argv[i], "--update_threshold") && (i + 2 < argc)) {
+            args.operation = "update_threshold";
+            args.district_id = argv[++i];
+            args.extra = argv[++i]; //report_id
+        }
+        else if (!strcmp(argv[i], "--filter") && i + 2 < argc) {
+            args.operation = "filter";
+            args.district_id = argv[++i];
+            args.extra = argv[++i];
+        }
     }
 
     if (!args.user_role || !args.user_name || !args.operation || !args.district_id) {
@@ -326,5 +516,11 @@ int main(int argc, char **argv) {
 
     if (!strcmp(args.operation, "remove_report"))
         remove_report(args.district_id, atoi(args.extra));
+
+    if (!strcmp(args.operation, "update_threshold"))
+        update_threshold(args.district_id, atoi(args.extra));
+
+    if (!strcmp(args.operation, "filter"))
+        filter(args.district_id, args.extra);
     return 0;
 }
