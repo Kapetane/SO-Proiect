@@ -1,17 +1,15 @@
 🔧 Tool folosit
-
 Am folosit ChatGPT + Gemini pentru a genera și înțelege funcțiile:
 
 parse_condition
 match_condition
+filter
 🧠 Prompt-uri folosite
-
 Pentru parse_condition/match_condition am folosit un prompt de tip:
-
 I-am aratat documentul aferent cu cerinta cat si codul pe care l-am scris pana in acel punct. 
+Pe parcurs tot i-am dat indicatii ca sa ajung la forma dorita.
 
-⚙️ Cod generat de AI (idee generală)
-
+⚙️ Cod generat de AI
 AI-ul a generat:
 
 folosirea strtok pentru parsare
@@ -42,13 +40,12 @@ Am lucrat pe o copie (temp), nu pe input.
 AI-ul nu trata corect cazurile când:
 
 lipsesc token-uri
-format invalid (severity>=2 în loc de severity:>=:2)
+format invalid (severity>=2 în loc de severity:>=:2) - nu conta asta asa de mult
+- am avut problema in cazul in care aveam ceva de genul:
+./city_manager --role inspector --user bob --filter downtown "severity:>=:2" category:==:road
+nu conta category:==:road -> lua si pe acelea care aveau altceva, de ex: lightning 
 
-👉 Soluția mea:
-
-if (!token) return 0;
-
-pentru fiecare pas.
+i-am explicat problema si pana la urma a rezolvat
 
 3. 🔴 Conversii de tip neclare
 
