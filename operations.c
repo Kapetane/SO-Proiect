@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 void add(const char *district_id, const char *user, const char *role) {
     if (mkdir(district_id, 0750) < 0) { }
@@ -279,3 +280,31 @@ void filter(const char *district_id, char **conditions, int num_conditions) {
     close(fd);
 }
 //END FILTER 💀
+void remove_district(const char *district_id, const char *user, const char *role) {
+    if(strcmp(role, "manager") != 0) { 
+        printf("Manager role only!\n");
+        return; 
+    }
+
+    char linkname[256];
+    snprintf(linkname, sizeof(linkname), "active_reports-%s", district_id);
+    
+    if(unlink(linkname)<0) {
+        perror("unlink la symlink");
+    }
+
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork");
+        return;
+    } 
+    else if (pid == 0) {
+        execlp("rm", "rm", "-rf", district_id, NULL);
+        exit(1); 
+    } 
+    else {
+        int status;
+        waitpid(pid, &status, 0);
+    }
+}

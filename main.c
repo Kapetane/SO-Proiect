@@ -41,6 +41,9 @@ int main(int argc, char **argv) {
                 args.num_conditions++;
                 i++;
             }
+        }else if (!strcmp(argv[i], "--remove_district") && i + 1 < argc) {
+            args.operation = "remove_district";
+            args.district_id = argv[++i];
         }
     }
 
@@ -61,6 +64,7 @@ int main(int argc, char **argv) {
         update_threshold(args.district_id, atoi(args.extra), args.user_name, args.user_role);
     else if (!strcmp(args.operation, "filter"))
         filter(args.district_id, args.conditions, args.num_conditions);
-
+    else if (!strcmp(args.operation, "remove_district"))
+        remove_district(args.district_id, args.user_name, args.user_role);
     return 0;
 }
