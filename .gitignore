@@ -1,0 +1,16 @@
+# Executabile
+city_manager
+monitor_reports
+
+# Fișiere obiect
+*.o
+
+# Fișiere de monitorizare
+.monitor_pid
+
+# Folderele cu districte (dacă vrei să urci doar codul, nu și testele)
+# downtown/
+# uptown/
+
+# Symlinks
+active_reports-*
