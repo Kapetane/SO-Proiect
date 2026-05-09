@@ -1,0 +1,3 @@
+1778339162 | inspector | marius | ADD - Monitor notified successfully
+1778339214 | manager | vasile | ADD - Monitor notified successfully
+1778339414 | manager | vasile | ADD - Warning: Monitor could not be informed (PID file missing or signal failed)
