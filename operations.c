@@ -79,6 +79,8 @@ void add(const char *district_id, const char *user, const char *role) {
     } else {
         log_action(district_id, role, user, "ADD - Warning: Monitor could not be informed (PID file missing or signal failed)");
     }
+
+
 }
 
 void list(const char *district_id){
@@ -211,7 +213,6 @@ void update_threshold(const char *district_id, int value, const char *user, cons
 }
 
 //FILTER ...
-
 int parse_condition(const char *input, char *field, char *op, char *value) {
     char temp[128];
     strncpy(temp, input, sizeof(temp) - 1);
@@ -301,6 +302,8 @@ void filter(const char *district_id, char **conditions, int num_conditions) {
     close(fd);
 }
 //END FILTER ...
+
+
 void remove_district(const char *district_id, const char *user, const char *role) {
     if(strcmp(role, "manager") != 0) { 
         printf("Manager role only!\n");
